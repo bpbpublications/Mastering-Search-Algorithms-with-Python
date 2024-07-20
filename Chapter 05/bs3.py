@@ -1,0 +1,123 @@
+import streamlit as st
+import plotly.graph_objects as go
+import networkx as nx
+from collections import deque
+
+class Graph:
+    def __init__(self, vertices):
+        self.vertices = vertices
+        self.graph = {vertex: [] for vertex in range(self.vertices)}
+    def addEdge(self, u, v):
+        self.graph[u].append(v)
+        self.graph[v].append(u)
+    def bidirectional_search(self, start, target):
+        if start == target:
+            return [start]
+        visited_from_start = {start}
+        visited_from_goal = {target}
+        queue_from_start = deque([start])
+        queue_from_goal = deque([target])
+        # Maintain parent pointers to reconstruct path
+        parent_start = {}
+        parent_goal = {}
+        while queue_from_start and queue_from_goal:
+            # Forward search from start
+            current_start = queue_from_start.popleft()
+            for neighbor in self.graph[current_start]:
+                if neighbor in visited_from_goal:
+                    path = [neighbor, current_start]
+                    while parent_start.get(current_start):
+                        current_start = parent_start[current_start]
+                        path.insert(1, current_start)
+                    current_goal = neighbor
+                    while parent_goal.get(current_goal):
+                        current_goal = parent_goal[current_goal]
+                        path.append(current_goal)
+                    return path
+                if neighbor not in visited_from_start:
+                    visited_from_start.add(neighbor)
+                    queue_from_start.append(neighbor)
+                    parent_start[neighbor] = current_start
+            # Backward search from goal
+            current_goal = queue_from_goal.popleft()
+            for neighbor in self.graph[current_goal]:
+                if neighbor in visited_from_start:
+                    path = [neighbor, current_goal]
+                    while parent_goal.get(current_goal):
+                        current_goal = parent_goal[current_goal]
+                        path.append(current_goal)
+                    current_start = neighbor
+                    while parent_start.get(current_start):
+                        current_start = parent_start[current_start]
+                        path.insert(0, current_start)
+                    return path
+                if neighbor not in visited_from_goal:
+                    visited_from_goal.add(neighbor)
+                    queue_from_goal.append(neighbor)
+                    parent_goal[neighbor] = current_goal
+        return None
+
+
+# Create a sample graph
+g = Graph(15)
+g.addEdge(0, 4)
+g.addEdge(1, 4)
+g.addEdge(2, 5)
+g.addEdge(3, 5)
+g.addEdge(4, 6)
+g.addEdge(5, 6)
+g.addEdge(6, 7)
+g.addEdge(7, 8)
+g.addEdge(8, 9)
+g.addEdge(8, 10)
+g.addEdge(9, 11)
+g.addEdge(9, 12)
+g.addEdge(10, 13)
+g.addEdge(10, 14)
+
+# Convert our graph to a networkx graph for layout computation
+G_nx = nx.Graph()
+for key, values in g.graph.items():
+    for value in values:
+        G_nx.add_edge(key, value)
+
+# Compute the 3D layout positions
+# The spring_layout has a dimension parameter for 3D
+pos = nx.spring_layout(G_nx, dim=3)
+
+# Streamlit app
+st.title("Bidirectional Search with Streamlit, Plotly, and NetworkX in 3D")
+
+start = st.number_input("Enter start node:", min_value=0, max_value=14, value=0, step=1)
+goal = st.number_input("Enter goal node:", min_value=0, max_value=14, value=14, step=1)
+
+if st.button("Search"):
+    path = g.bidirectional_search(start, goal)
+    st.write(f"Found path: {path}")
+
+    edge_x = []
+    edge_y = []
+    edge_z = []
+    for edge in G_nx.edges():
+        edge_x.extend([pos[edge[0]][0], pos[edge[1]][0], None])
+        edge_y.extend([pos[edge[0]][1], pos[edge[1]][1], None])
+        edge_z.extend([pos[edge[0]][2], pos[edge[1]][2], None])
+
+    node_x = [pos[node][0] for node in G_nx.nodes()]
+    node_y = [pos[node][1] for node in G_nx.nodes()]
+    node_z = [pos[node][2] for node in G_nx.nodes()]
+
+    edge_trace = go.Scatter3d(
+        x=edge_x, y=edge_y, z=edge_z, line=dict(width=0.5, color="#888"), hoverinfo="none", mode="lines"
+    )
+
+    node_trace = go.Scatter3d(
+        x=node_x, y=node_y, z=node_z, mode="markers+text", hoverinfo="text", marker=dict(showscale=True, colorscale="YlGnBu", size=10, colorbar=dict(thickness=15, title="Node Connections", xanchor="left")),
+        text=list(G_nx.nodes()), textposition="top center"
+    )
+
+    fig = go.Figure(data=[edge_trace, node_trace],
+                    layout=go.Layout(showlegend=False, hovermode="closest", margin=dict(t=0, b=0, l=0, r=0))
+    )
+
+    st.plotly_chart(fig)
